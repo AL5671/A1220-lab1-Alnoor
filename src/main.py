@@ -27,15 +27,44 @@ def normalize_amount(data):
     return data
 
 
-def parse_date_yyyy_mm_dd(s):
-    """Parse YYYY-MM-DD into datetime.date, else return None."""
+from datetime import datetime, date
+
+def parse_receipt_date(s):
+    """Parse common receipt date formats into a date object.
+
+    Supports:
+      - YYYY-MM-DD
+      - MM/DD/YYYY
+      - DD/MM/YYYY
+      - 'Wed, Nov 06, 2019'
+      - '30/09/2025 20:15' (time ignored)
+
+    Returns:
+        datetime.date or None if not parseable.
+    """
     if not isinstance(s, str):
         return None
-    try:
-        y, m, d = s.strip().split("-")
-        return date(int(y), int(m), int(d))
-    except Exception:
+
+    s = s.strip()
+    if not s:
         return None
+
+    formats = [
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%d/%m/%Y",
+        "%a, %b %d, %Y",
+        "%d/%m/%Y %H:%M",
+        "%m/%d/%Y %H:%M",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+
+    return None
 
 
 def process_directory(dirpath):
@@ -50,29 +79,36 @@ def process_directory(dirpath):
 
 
 def filter_expenses(data_by_file, start_s, end_s):
-    """Filter receipts by inclusive date range."""
-    start_d = parse_date_yyyy_mm_dd(start_s)
-    end_d = parse_date_yyyy_mm_dd(end_s)
-
+    """Filter receipts by inclusive date range, keeping only valid date+amount rows."""
+    start_d = parse_receipt_date(start_s)
+    end_d = parse_receipt_date(end_s)
     if start_d is None or end_d is None:
-        raise ValueError("Dates must be YYYY-MM-DD")
+        raise ValueError("Dates must be in a recognized format (recommended: YYYY-MM-DD).")
 
     rows = []
     for fname, rec in data_by_file.items():
-        d = parse_date_yyyy_mm_dd(rec.get("date"))
+        d = parse_receipt_date(rec.get("date"))
         amt = rec.get("amount")
 
-        if d is None or not isinstance(amt, (int, float)):
+        if d is None:
+            continue
+        if not isinstance(amt, (int, float)):
             continue
 
         if start_d <= d <= end_d:
             rows.append(
-                (fname, d.isoformat(), float(amt),
-                 rec.get("vendor"), rec.get("category"))
+                (
+                    fname,
+                    d.isoformat(),
+                    float(amt),
+                    rec.get("vendor"),
+                    rec.get("category"),
+                )
             )
 
     rows.sort(key=lambda r: (r[1], r[0]))
     return rows
+
 
 
 def print_expenses_report(rows, start_s, end_s):
