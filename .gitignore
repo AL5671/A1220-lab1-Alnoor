@@ -1,0 +1,16 @@
+# virtual env
+.venv/
+
+# receipts/images (don’t commit data)
+receipts/
+
+# generated docs
+docs/
+
+# python cache
+__pycache__/
+*.pyc
+
+# secrets
+.env
+
